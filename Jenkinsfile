@@ -14,9 +14,17 @@ spec:
       command:
         - cat
       tty: true
+      volumeMounts:
+        - name: dockersock
+          mountPath: /var/run/docker.sock
+  volumes:
+    - name: dockersock
+      hostPath:
+        path: /var/run/docker.sock
 '''
         }
     }
+}
     environment {
         PROJECT_ID = "project-10094705-9153-43d5-bb8"
         REGISTRY = "asia-south1-docker.pkg.dev/project-10094705-9153-43d5-bb8/my-app-repo/go-app"
