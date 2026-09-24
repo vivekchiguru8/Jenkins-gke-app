@@ -6,7 +6,8 @@ pipeline {
         CLUSTER = "my-go-cluster"
         ZONE = "asia-south1-a"
         NAMESPACE = "go-app"
-        PATH = "/tmp/google-cloud-sdk/bin:/usr/local/bin:/tmp:/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        CLOUDSDK_CORE_DISABLE_PROMPTS = "1"
+        PATH = "/tmp/google-cloud-sdk/bin:/usr/local/bin:/tmp:$PATH"
     }
     parameters {
         choice(name: 'ACTION', choices: ['apply', 'destroy'], description: 'Choose apply or destroy')
@@ -16,40 +17,27 @@ pipeline {
             steps {
                 sh '''
                   set -e
-                  echo "=== Installing dependencies ==="
-                  # Install python3 for gcloud installer
-                  if ! command -v python3 >/dev/null 2>&1; then
-                    apt-get update -qq || true
-                    apt-get install -y python3 python3-distutils curl wget unzip sudo 2>/dev/null || true
-                    # Try apk if alpine
-                    apk add --no-cache python3 curl wget unzip 2>/dev/null || true
-                    ln -sf $(which python3) /usr/bin/python 2>/dev/null || ln -sf /usr/bin/python3 /usr/bin/python || true
-                  fi
-                  if ! command -v python >/dev/null 2>&1; then
-                    ln -sf $(which python3) /usr/local/bin/python || ln -sf $(which python3) /usr/bin/python || true
-                  fi
-                  python3 --version
-                  python --version || true
-
-                  echo "=== Installing gcloud ==="
+                  mkdir -p /tmp
+                  echo "=== GCloud portable install ==="
                   if [ ! -f /tmp/google-cloud-sdk/bin/gcloud ]; then
-                    curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/tmp --usage-reporting=false
+                    cd /tmp
+                    wget -q https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz -O gcloud.tar.gz
+                    tar -xzf gcloud.tar.gz
+                    ./google-cloud-sdk/install.sh --quiet --usage-reporting=false --path-update=false --bash-completion=false
                   fi
                   /tmp/google-cloud-sdk/bin/gcloud --version
 
-                  echo "=== Installing terraform ==="
-                  if ! command -v terraform >/dev/null 2>&1 && [ ! -f /usr/local/bin/terraform ]; then
+                  echo "=== Terraform portable ==="
+                  if [ ! -f /tmp/terraform ]; then
                     wget -q https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip -O /tmp/tf.zip
                     unzip -o /tmp/tf.zip -d /tmp/
                     chmod +x /tmp/terraform
-                    mv /tmp/terraform /usr/local/bin/terraform || sudo mv /tmp/terraform /usr/local/bin/terraform || cp /tmp/terraform /tmp/terraform-bin
-                    chmod +x /usr/local/bin/terraform 2>/dev/null || chmod +x /tmp/terraform-bin
                   fi
-                  terraform version || /usr/local/bin/terraform version || /tmp/terraform-bin version
+                  /tmp/terraform version
 
-                  echo "=== Installing kubectl ==="
+                  echo "=== kubectl via gcloud ==="
                   /tmp/google-cloud-sdk/bin/gcloud components install kubectl --quiet || true
-                  kubectl version --client || /tmp/google-cloud-sdk/bin/kubectl version --client
+                  /tmp/google-cloud-sdk/bin/kubectl version --client || kubectl version --client || true
                 '''
             }
         }
@@ -57,10 +45,10 @@ pipeline {
             when { expression { params.ACTION == 'apply' } }
             steps {
                 sh '''
-                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:/usr/local/bin:$PATH
+                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:$PATH
                   gcloud config set project $PROJECT_ID --quiet
-                  terraform init -reconfigure
-                  terraform apply -auto-approve
+                  terraform init -reconfigure || /tmp/terraform init -reconfigure
+                  terraform apply -auto-approve || /tmp/terraform apply -auto-approve
                 '''
             }
         }
@@ -68,7 +56,7 @@ pipeline {
             when { expression { params.ACTION == 'apply' } }
             steps {
                 sh '''
-                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:/usr/local/bin:$PATH
+                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:$PATH
                   gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
                   gcloud container clusters get-credentials jenkins-cluster --zone $ZONE --project $PROJECT_ID
                   docker build -t $REGISTRY:$BUILD_NUMBER -t $REGISTRY:latest .
@@ -81,7 +69,7 @@ pipeline {
             when { expression { params.ACTION == 'apply' } }
             steps {
                 sh '''
-                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:/usr/local/bin:$PATH
+                  export PATH=/tmp/google-cloud-sdk/bin:/tmp:$PATH
                   gcloud container clusters get-credentials my-go-cluster --zone $ZONE --project $PROJECT_ID || gcloud container clusters get-credentials jenkins-cluster --zone $ZONE --project $PROJECT_ID
                   kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
                   kubectl -n $NAMESPACE create deployment go-app --image=$REGISTRY:$BUILD_NUMBER --port=8080 --dry-run=client -o yaml | kubectl apply -f -
