@@ -8,12 +8,12 @@ spec:
   serviceAccountName: jenkins
   containers:
     - name: jnlp
-    image: jenkins/inbound-agent:latest
+      image: jenkins/inbound-agent:latest
     - name: tools
-    image: google/cloud-sdk:alpine
-    command:
+      image: google/cloud-sdk:alpine
+      command:
         - cat
-    tty: true
+      tty: true
 '''
         }
     }
@@ -62,7 +62,7 @@ spec:
                 container('tools') {
                     sh '''
                       gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
-                      gcloud container clusters get-credentials jenkins-cluster --zone $ZONE --project $PROJECT_ID
+                      gcloud container clusters get-credentials $CLUSTER --zone $ZONE --project $PROJECT_ID
                       docker build -t $REGISTRY:$BUILD_NUMBER -t $REGISTRY:latest .
                       docker push $REGISTRY:$BUILD_NUMBER
                       docker push $REGISTRY:latest
@@ -75,7 +75,7 @@ spec:
             steps {
                 container('tools') {
                     sh '''
-                      gcloud container clusters get-credentials my-go-cluster --zone $ZONE --project $PROJECT_ID || gcloud container clusters get-credentials jenkins-cluster --zone $ZONE --project $PROJECT_ID
+                      gcloud container clusters get-credentials $CLUSTER --zone $ZONE --project $PROJECT_ID
                       kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
                       kubectl -n $NAMESPACE create deployment go-app --image=$REGISTRY:$BUILD_NUMBER --port=8080 --dry-run=client -o yaml | kubectl apply -f -
                       kubectl -n $NAMESPACE scale deployment go-app --replicas=2
