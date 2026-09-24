@@ -52,18 +52,18 @@ spec:
                 }
             }
         }
-        stage('Terraform Apply Infra') {
-            when { expression { params.ACTION == 'apply' } }
-            steps {
-                container('tools') {
-                    sh '''
-                      gcloud config set project $PROJECT_ID --quiet
-                      terraform init -reconfigure
-                      terraform apply -auto-approve
-                    '''
-                }
-            }
-        }
+     //        stage('Terraform Apply Infra') {
+//            when { expression { params.ACTION == 'apply' } }
+//            steps {
+//                container('tools') {
+//                    sh '''
+//                      gcloud config set project $PROJECT_ID --quiet
+//                      terraform init -reconfigure
+//                      terraform apply -auto-approve
+//                    '''
+//               }
+//         }
+//      }
         stage('Build & Push Go App') {
             when { expression { params.ACTION == 'apply' } }
             steps {
